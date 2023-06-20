@@ -1,0 +1,106 @@
+import cv2
+import streamlit as st
+import numpy as np
+from tensorflow.keras.models import load_model
+
+# Load the BMI model
+model = load_model('bmi_model_mod.h5')
+
+# Define a function to preprocess the input image
+def preprocess_image(image):
+    image = cv2.resize(image, (224, 224))
+    image = image / 255.0  # Normalize the image
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    return image
+
+# Define a function to predict the BMI
+def predict_bmi(image):
+    preprocessed_image = preprocess_image(image)
+    prediction = model.predict(preprocessed_image)[0]
+    return prediction
+
+# Define the main function to run the Streamlit app
+def main():
+    st.title("BMI Detection App")
+
+    option = st.sidebar.selectbox("Select Option", ("Camera", "Upload Image"))
+
+    if option == "Camera":
+        run_camera()
+    elif option == "Upload Image":
+        run_upload()
+
+# Function to run the camera option
+def run_camera():
+    st.header("Camera")
+    video_capture = cv2.VideoCapture(0)
+
+    while True:
+        ret, frame = video_capture.read()
+        if not ret:
+            break
+
+        # Detect faces
+        faces = detect_faces(frame)
+
+        # Process each detected face
+        for (x, y, w, h) in faces:
+            face_image = frame[y:y+h, x:x+w]
+
+            # Predict BMI
+            bmi = predict_bmi(face_image)
+
+            # Draw bounding box
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+            # Display BMI
+            cv2.putText(frame, f"BMI: {bmi}", (x, y-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+        # Display the resulting frame
+        cv2.imshow('Camera', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Release the video capture and close OpenCV windows
+    video_capture.release()
+    cv2.destroyAllWindows()
+
+# Function to run the upload image option
+def run_upload():
+    st.header("Upload Image")
+    uploaded_file = st.file_uploader("Choose an image file", type=['jpg', 'jpeg', 'png'])
+
+    if uploaded_file is not None:
+        image = np.array(Image.open(uploaded_file))
+
+        # Detect faces
+        faces = detect_faces(image)
+
+        # Process each detected face
+        for (x, y, w, h) in faces:
+            face_image = image[y:y+h, x:x+w]
+
+            # Predict BMI
+            bmi = predict_bmi(face_image)
+
+            # Draw bounding box
+            cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+            # Display BMI
+            cv2.putText(image, f"BMI: {bmi}", (x, y-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+        # Display the image with bounding boxes and predicted BMI
+        st.image(image, channels="BGR")
+
+# Function to detect faces using OpenCV's Haar Cascade classifier
+def detect_faces(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    return faces
+
+# Run the app
+if __name__ == '__main__':
+    main()
